@@ -1,0 +1,22 @@
+# /etc/sudoers.d/fleet-lock-helper   (installare con: install -m 0440 -o root -g wheel; validare con visudo -cf)
+# Consente a __USER__ di gestire il lucchetto SOLO tramite l'helper root /usr/local/sbin/fleet-lock-apply.
+#
+# DEFAULT SICURO:
+#   - close / set-timeout / status  = NOPASSWD  (riducono privilegi o sola lettura: il watcher
+#     idle deve poter CHIUDERE senza password; aprire NO).
+#   - open                          = richiede autenticazione (Touch ID/password): il lucchetto
+#     non si apre di nascosto (coerente con la scelta "Touch ID per attivare").
+Cmnd_Alias FLK_SAFE = /usr/local/sbin/fleet-lock-apply close, /usr/local/sbin/fleet-lock-apply set-timeout *, /usr/local/sbin/fleet-lock-apply status
+Cmnd_Alias FLK_OPEN = /usr/local/sbin/fleet-lock-apply open *
+# difesa in profondità: PATH fisso per l'helper (oltre all'export nello script)
+Defaults!/usr/local/sbin/fleet-lock-apply secure_path="/usr/sbin:/usr/bin:/sbin:/bin"
+__USER__ ALL=(root) NOPASSWD: FLK_SAFE
+__USER__ ALL=(root) PASSWD:   FLK_OPEN
+
+# ------------------------------------------------------------------------------------
+# OPZIONALE — "trusted controller" (solo per i device pilotati da remoto dal controller):
+# scommenta la riga sotto per permettere ANCHE 'open' senza password su QUESTO device.
+# ⚠️ SICUREZZA: così chi può eseguire come __USER__ (incluso chi ha la chiave SSH del
+#    controller, o un processo locale) apre il root-senza-password su questo host senza auth.
+#    Il controller resta comunque protetto da Touch ID; i remoti diventano frictionless.
+# __USER__ ALL=(root) NOPASSWD: FLK_OPEN
