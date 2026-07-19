@@ -7,6 +7,7 @@ SRC="$(cd "$(dirname "$0")" && pwd)"
 mkdir -p "$HOME/.local/bin" "$HOME/.config/fleet-lock"
 install -m 0755 "$SRC/fleet-lock.sh"  "$HOME/.local/bin/fleet-lock"
 install -m 0755 "$SRC/sa-setlang.sh"  "$HOME/.local/bin/sa-setlang"
+install -m 0755 "$SRC/sa-gh-sync.sh"  "$HOME/.local/bin/sa-gh-sync"
 
 # empty inventories on first install
 [ -f "$HOME/.config/fleet-lock/hosts" ]         || printf '# one SSH alias per line (e.g. host1)\n' > "$HOME/.config/fleet-lock/hosts"
@@ -25,3 +26,4 @@ fi
 
 echo "OK: controller ready. Add your devices to ~/.config/fleet-lock/hosts"
 echo "    Ensure ~/.local/bin is on your PATH."
+echo "    Optional: 'sa-gh-sync' propagates your GitHub CLI (gh) auth to the fleet."

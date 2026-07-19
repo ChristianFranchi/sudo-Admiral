@@ -4,7 +4,7 @@ set -u
 AGENT_LABEL="io.github.christianfranchi.sudo-admiral.agent"
 
 echo "== controller + menu-bar app (user) =="
-rm -f "$HOME/.local/bin/fleet-lock" "$HOME/.local/bin/sa-setlang"
+rm -f "$HOME/.local/bin/fleet-lock" "$HOME/.local/bin/sa-setlang" "$HOME/.local/bin/sa-gh-sync"
 PDIR="$(defaults read com.ameba.SwiftBar PluginDirectory 2>/dev/null || echo "$HOME/.config/swiftbar-plugins")"
 rm -f "$PDIR/sudo-Admiral.30s.sh"
 rm -rf "$HOME/.config/sudo-admiral"

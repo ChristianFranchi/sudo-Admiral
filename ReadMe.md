@@ -36,6 +36,7 @@ There is an **optional "trusted-controller" mode** that lets the controller open
 | `fleet-lock-agent` | per-device LaunchAgent: reads idle time from `ioreg` (`HIDIdleTime`) and **re-locks after N minutes of inactivity**. Headless devices are time-boxed from the moment they were opened. |
 | `fleet-lock` | controller CLI on your main machine: `open` / `close` / `set N` / `status`, fanned out to the fleet over SSH. |
 | `sudo-Admiral.30s.sh` | SwiftBar menu-bar app: the lock toggle, per-device status, an N selector, and a language menu. |
+| `sa-gh-sync` | controller utility: propagates your **GitHub CLI (`gh`) auth** to the whole fleet over SSH — the token travels only through a pipe, never on screen/disk/argv. Reuses the same `hosts` inventory. Not part of the sudo lock; user-level, no root. |
 
 The "lock" is just a file (`/etc/sudoers.d/fleet-nopasswd` = `NOPASSWD: ALL`). "Idle re-lock" removes it; `timestamp_timeout` is also set as defense-in-depth.
 
@@ -116,6 +117,7 @@ From the menu bar:
 - **Unlock / Lock fleet** — one click toggles the whole fleet (Touch ID to open).
 - **Preferences → Idle timeout** — choose N (1 / 5 / 10 / 15 / 30 / 60 min).
 - **Preferences → Language** — Italiano · English · Español · Français · Deutsch · 中文.
+- **GitHub (gh) → Sync auth → fleet** — push your active `gh` login to every device (see below).
 - The device list shows each member's state (unlocked / locked / manageable / unreachable).
 
 Or from the CLI:
@@ -126,6 +128,31 @@ fleet-lock close
 fleet-lock set 15
 fleet-lock status
 ```
+
+---
+
+## Sync `gh` (GitHub CLI) auth across the fleet
+
+A fleet member's `gh` can drift out of auth (expired/invalid token → every `gh api` returns 404). Instead of logging in by hand on each box, **`sa-gh-sync`** reuses the same fleet plumbing to push your controller's `gh` login to every device:
+
+```bash
+sa-gh-sync                 # propagate the ACTIVE gh account to the whole fleet
+sa-gh-sync -u <account>    # propagate a specific authenticated account
+sa-gh-sync macmini         # only this host (any subset of the inventory)
+sa-gh-sync status          # read-only: show who each device is logged in as
+```
+
+or from the menu bar: **GitHub (gh) → Sync auth → fleet** (a macOS notification reports the result).
+
+**How the token moves — safely.** The token is **never printed, written to a file, or placed on a command line**. It travels only through a pipe from the controller to the target over SSH, and is handed to `gh`'s official `--with-token` reader on `stdin`:
+
+```
+gh auth token | ssh <host> 'bash -lc "gh auth login -h github.com --with-token"'
+```
+
+The target then `gh auth switch`es to the right account (in case it holds several) and verifies with `gh api user`. It stays entirely inside your network (device→device on the tailnet) and uses `gh`'s own keyring/`hosts.yml`. `sa-gh-sync` is **user-level** — it has nothing to do with the sudo lock and needs no root. Windows hosts are skipped (the `bash -lc` method is macOS/Homebrew-specific).
+
+> Prerequisites: `gh` installed on both ends, key-based SSH (the tailnet), and the controller already logged in with the scopes you need (`gh auth status` → `repo`, plus `read:org` for private orgs). If **no** device is authenticated yet, do a normal `gh auth login -w` once (device-code flow) to seed the first token.
 
 ---
 
