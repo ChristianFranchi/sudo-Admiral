@@ -13,13 +13,14 @@ APPLY="/usr/local/sbin/fleet-lock-apply"
 HOSTS_FILE="${FLEET_HOSTS:-$HOME/.config/fleet-lock/hosts}"
 SSH="ssh -o BatchMode=yes -o ConnectTimeout=8"
 
-# solo alias host "puliti" (anti-injection): lettere/cifre/._-
-hosts(){ [ -f "$HOSTS_FILE" ] && grep -vE '^\s*(#|$)' "$HOSTS_FILE" | grep -E '^[A-Za-z0-9._-]+$' || true; }
+# solo alias host "puliti" (anti-injection): lettere/cifre/._- e MAI un trattino iniziale
+# (ssh lo leggerebbe come opzione); '--' prima dell'host nelle ssh come seconda difesa.
+hosts(){ [ -f "$HOSTS_FILE" ] && grep -vE '^\s*(#|$)' "$HOSTS_FILE" | grep -E '^[A-Za-z0-9._][A-Za-z0-9._-]*$' || true; }
 
 # host Windows (Opzione A): "alias|jump" — raggiunti via hop SSH sul jump; solo gestione
 # remota (SSH admin già elevato), nessun lucchetto/UAC da toggle.
 WINHOSTS_FILE="${FLEET_WINHOSTS:-$HOME/.config/fleet-lock/windows-hosts}"
-winhosts(){ [ -f "$WINHOSTS_FILE" ] && grep -vE '^\s*(#|$)' "$WINHOSTS_FILE" | grep -E '^[A-Za-z0-9._-]+\|[A-Za-z0-9._-]+$' || true; }
+winhosts(){ [ -f "$WINHOSTS_FILE" ] && grep -vE '^\s*(#|$)' "$WINHOSTS_FILE" | grep -E '^[A-Za-z0-9._][A-Za-z0-9._-]*\|[A-Za-z0-9._][A-Za-z0-9._-]*$' || true; }
 
 # solo open/set-timeout hanno bisogno dell'argomento <user>; close/status no.
 needs_user(){ case "$1" in open|set-timeout) return 0;; *) return 1;; esac; }
@@ -38,7 +39,7 @@ run_remote(){ # $1=host $2=verbo, resto=args (N validato; verb letterale; host v
   local h="$1" verb="$2"; shift 2
   local rc="sudo -n $APPLY $verb $*"
   needs_user "$verb" && rc="$rc \"\$(id -un)\""     # id -un valutato SUL remoto
-  $SSH "$h" "$rc" 2>/dev/null
+  $SSH -- "$h" "$rc" 2>/dev/null
 }
 
 fanout(){ # $1=verbo, resto=args
@@ -57,7 +58,7 @@ fanout(){ # $1=verbo, resto=args
     [ -n "$wh" ] || continue
     printf '  %-8s: ' "$wh"
     if [ "$verb" = status ]; then
-      if who="$($SSH "$wj" "ssh -o BatchMode=yes -o ConnectTimeout=8 $wh whoami" 2>/dev/null)" && [ -n "$who" ]; then
+      if who="$($SSH -- "$wj" "ssh -o BatchMode=yes -o ConnectTimeout=8 -- $wh whoami" 2>/dev/null)" && [ -n "$who" ]; then
         echo "gestibile (SSH elevato)"
       else echo "irraggiungibile (via $wj)"; fi
     else
