@@ -22,8 +22,8 @@ hosts(){ [ -f "$HOSTS_FILE" ] && grep -vE '^\s*(#|$)' "$HOSTS_FILE" | grep -E '^
 WINHOSTS_FILE="${FLEET_WINHOSTS:-$HOME/.config/fleet-lock/windows-hosts}"
 winhosts(){ [ -f "$WINHOSTS_FILE" ] && grep -vE '^\s*(#|$)' "$WINHOSTS_FILE" | grep -E '^[A-Za-z0-9._][A-Za-z0-9._-]*\|[A-Za-z0-9._][A-Za-z0-9._-]*$' || true; }
 
-# solo open/set-timeout hanno bisogno dell'argomento <user>; close/status no.
-needs_user(){ case "$1" in open|set-timeout) return 0;; *) return 1;; esac; }
+# solo open/set-timeout/extend hanno bisogno dell'argomento <user>; close/status no.
+needs_user(){ case "$1" in open|set-timeout|extend) return 0;; *) return 1;; esac; }
 
 run_local(){  # $1=verbo, resto=args ; open richiede auth (Touch ID se pam_tid attivo)
   local verb="$1"; shift
@@ -70,9 +70,12 @@ fanout(){ # $1=verbo, resto=args
 case "${1:-}" in
   open)   echo "Apro il lucchetto (fleet):";  fanout open ;;
   close)  echo "Chiudo il lucchetto (fleet):"; fanout close ;;
-  set)    n="${2:-}"; case "$n" in ''|*[!0-9]*) echo "N non valido (solo cifre 1..120)"; exit 2;; esac
-          { [ "$n" -ge 1 ] && [ "$n" -le 120 ]; } || { echo "N fuori range (1..120)"; exit 2; }
+  set)    n="${2:-}"; case "$n" in ''|*[!0-9]*) echo "N non valido (solo cifre 1..360)"; exit 2;; esac
+          { [ "$n" -ge 1 ] && [ "$n" -le 360 ]; } || { echo "N fuori range (1..360)"; exit 2; }
           echo "Imposto timeout inattività = $n min (fleet):"; fanout set-timeout "$n" ;;
+  extend) x="${2:-}"; case "$x" in ''|*[!0-9]*) echo "X non valido (minuti 1..360)"; exit 2;; esac
+          { [ "$x" -ge 1 ] && [ "$x" -le 360 ]; } || { echo "X fuori range (1..360)"; exit 2; }
+          echo "Estendo l'apertura di +$x min (fleet):"; fanout extend "$x" ;;
   status) echo "Stato lucchetto (fleet):"; fanout status ;;
-  *) echo "uso: fleet-lock {open|close|set <N>|status}"; exit 2 ;;
+  *) echo "uso: fleet-lock {open|close|set <N>|extend <X>|status}"; exit 2 ;;
 esac
