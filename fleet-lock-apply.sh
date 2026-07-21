@@ -55,16 +55,31 @@ $u ALL=(ALL) NOPASSWD: ALL"
   set-timeout)
     n="${2:-}"; u="${3:-}"
     case "$n" in ''|*[!0-9]*) die "N non valido (solo cifre)";; esac
-    [ "$n" -ge 1 ] && [ "$n" -le 120 ] || die "N fuori range (1..120)"
+    [ "$n" -ge 1 ] && [ "$n" -le 360 ] || die "N fuori range (1..360)"
     valid_user "$u" || die "utente non valido"; require_caller "$u"
     install_sudoers "$TIMEOUT_FILE" "# fleet-lock: timeout cache sudo (min)
 Defaults:$u timestamp_timeout=$n"
     ensure_state; printf '%s\n' "$n" > "$N_FILE"; chmod 0644 "$N_FILE"
     echo "timeout=$n"
     ;;
+  extend)
+    # allunga la finestra corrente di X minuti: opened_at += X*60, clampato a "adesso"
+    # (mai oltre una finestra piena). Solo a lucchetto aperto. Stesso livello di fiducia
+    # di set-timeout (la sessione è già stata autorizzata all'open): NOPASSWD via FLK_SAFE.
+    x="${2:-}"; u="${3:-}"
+    case "$x" in ''|*[!0-9]*) die "X non valido (minuti, solo cifre)";; esac
+    [ "$x" -ge 1 ] && [ "$x" -le 360 ] || die "X fuori range (1..360)"
+    valid_user "$u" || die "utente non valido"; require_caller "$u"
+    [ -f "$NOPASSWD_FILE" ] || die "lucchetto chiuso: niente da estendere"
+    now="$(date +%s)"
+    opened="$(cat "$OPENED_FILE" 2>/dev/null || echo "$now")"; case "$opened" in ''|*[!0-9]*) opened="$now";; esac
+    newop=$(( opened + x*60 )); [ "$newop" -gt "$now" ] && newop="$now"
+    ensure_state; printf '%s\n' "$newop" > "$OPENED_FILE"; chmod 0644 "$OPENED_FILE"
+    echo "extended"
+    ;;
   status)
     if [ -f "$NOPASSWD_FILE" ]; then st=open; else st=closed; fi
     echo "$st timeout=$(cat "$N_FILE" 2>/dev/null || echo '?') opened_at=$(cat "$OPENED_FILE" 2>/dev/null || echo '-')"
     ;;
-  *) die "usage: fleet-lock-apply {open <user>|close|set-timeout <N> <user>|status}";;
+  *) die "usage: fleet-lock-apply {open <user>|close|set-timeout <N> <user>|extend <X> <user>|status}";;
 esac
