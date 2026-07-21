@@ -69,7 +69,20 @@ fanout(){ # $1=verbo, resto=args
 
 case "${1:-}" in
   open)   echo "Apro il lucchetto (fleet):";  fanout open ;;
-  close)  echo "Chiudo il lucchetto (fleet):"; fanout close ;;
+  close)  shift || true
+          if [ "$#" -eq 0 ]; then echo "Chiudo il lucchetto (fleet):"; fanout close
+          else
+            echo "Chiudo il lucchetto su: $*"
+            for h in "$@"; do
+              case "$h" in
+                ''|-*|*[!A-Za-z0-9._-]*) echo "  host non valido: '$h'"; continue;;
+                local|localhost) printf '  local   : '; run_local close || echo "FALLITO";;
+                *) printf '  %-8s: ' "$h"
+                   if out="$(run_remote "$h" close)"; then echo "$out"
+                   else echo "FALLITO/irraggiungibile"; fi;;
+              esac
+            done
+          fi ;;
   set)    n="${2:-}"; case "$n" in ''|*[!0-9]*) echo "N non valido (solo cifre 1..360)"; exit 2;; esac
           { [ "$n" -ge 1 ] && [ "$n" -le 360 ]; } || { echo "N fuori range (1..360)"; exit 2; }
           echo "Imposto timeout inattività = $n min (fleet):"; fanout set-timeout "$n" ;;
@@ -77,5 +90,5 @@ case "${1:-}" in
           { [ "$x" -ge 1 ] && [ "$x" -le 360 ]; } || { echo "X fuori range (1..360)"; exit 2; }
           echo "Estendo l'apertura di +$x min (fleet):"; fanout extend "$x" ;;
   status) echo "Stato lucchetto (fleet):"; fanout status ;;
-  *) echo "uso: fleet-lock {open|close|set <N>|extend <X>|status}"; exit 2 ;;
+  *) echo "uso: fleet-lock {open|close [host...]|set <N>|extend <X>|status}"; exit 2 ;;
 esac
