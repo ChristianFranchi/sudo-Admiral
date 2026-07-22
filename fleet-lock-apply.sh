@@ -16,6 +16,7 @@ TIMEOUT_FILE="/etc/sudoers.d/fleet-timeout"
 STATE_DIR="/var/db/fleet-lock"
 N_FILE="$STATE_DIR/timeout_minutes"
 OPENED_FILE="$STATE_DIR/opened_at"
+CLOSE_AT_FILE="$STATE_DIR/close_at"     # deadline ASSOLUTA (epoch): il countdown e il watcher la seguono
 VISUDO="/usr/sbin/visudo"
 
 die(){ echo "fleet-lock-apply: $*" >&2; exit 1; }
@@ -45,11 +46,13 @@ case "${1:-}" in
     u="${2:-}"; valid_user "$u" || die "utente non valido"; require_caller "$u"
     install_sudoers "$NOPASSWD_FILE" "# fleet-lock: lucchetto APERTO
 $u ALL=(ALL) NOPASSWD: ALL"
-    ensure_state; date +%s > "$OPENED_FILE"; chmod 0644 "$OPENED_FILE"
+    ensure_state; now="$(date +%s)"; printf '%s\n' "$now" > "$OPENED_FILE"; chmod 0644 "$OPENED_FILE"
+    n="$(cat "$N_FILE" 2>/dev/null || echo 10)"; case "$n" in ''|*[!0-9]*) n=10;; esac
+    printf '%s\n' "$(( now + n*60 ))" > "$CLOSE_AT_FILE"; chmod 0644 "$CLOSE_AT_FILE"   # deadline = ora + N
     echo "open"
     ;;
   close)
-    rm -f "$NOPASSWD_FILE" "$OPENED_FILE"
+    rm -f "$NOPASSWD_FILE" "$OPENED_FILE" "$CLOSE_AT_FILE"
     echo "closed"
     ;;
   set-timeout)
@@ -63,23 +66,24 @@ Defaults:$u timestamp_timeout=$n"
     echo "timeout=$n"
     ;;
   extend)
-    # allunga la finestra corrente di X minuti: opened_at += X*60, clampato a "adesso"
-    # (mai oltre una finestra piena). Solo a lucchetto aperto. Stesso livello di fiducia
-    # di set-timeout (la sessione è già stata autorizzata all'open): NOPASSWD via FLK_SAFE.
+    # SOMMA X minuti alla deadline: close_at += X*60 (additivo, monotòno-verso-l'alto).
+    # Se la deadline è già scaduta, riparte da adesso. Cap di sicurezza a +24h dall'ora corrente.
+    # Solo a lucchetto aperto. Stessa fiducia di set-timeout (sessione già autorizzata): NOPASSWD.
     x="${2:-}"; u="${3:-}"
     case "$x" in ''|*[!0-9]*) die "X non valido (minuti, solo cifre)";; esac
     [ "$x" -ge 1 ] && [ "$x" -le 360 ] || die "X fuori range (1..360)"
     valid_user "$u" || die "utente non valido"; require_caller "$u"
     [ -f "$NOPASSWD_FILE" ] || die "lucchetto chiuso: niente da estendere"
     now="$(date +%s)"
-    opened="$(cat "$OPENED_FILE" 2>/dev/null || echo "$now")"; case "$opened" in ''|*[!0-9]*) opened="$now";; esac
-    newop=$(( opened + x*60 )); [ "$newop" -gt "$now" ] && newop="$now"
-    ensure_state; printf '%s\n' "$newop" > "$OPENED_FILE"; chmod 0644 "$OPENED_FILE"
-    echo "extended"
+    ca="$(cat "$CLOSE_AT_FILE" 2>/dev/null || echo "$now")"; case "$ca" in ''|*[!0-9]*) ca="$now";; esac
+    [ "$ca" -lt "$now" ] && ca="$now"                 # già scaduta → riparti da adesso
+    newca=$(( ca + x*60 )); cap=$(( now + 24*3600 )); [ "$newca" -gt "$cap" ] && newca="$cap"
+    ensure_state; printf '%s\n' "$newca" > "$CLOSE_AT_FILE"; chmod 0644 "$CLOSE_AT_FILE"
+    echo "extended close_at=$newca"
     ;;
   status)
     if [ -f "$NOPASSWD_FILE" ]; then st=open; else st=closed; fi
-    echo "$st timeout=$(cat "$N_FILE" 2>/dev/null || echo '?') opened_at=$(cat "$OPENED_FILE" 2>/dev/null || echo '-')"
+    echo "$st timeout=$(cat "$N_FILE" 2>/dev/null || echo '?') opened_at=$(cat "$OPENED_FILE" 2>/dev/null || echo '-') close_at=$(cat "$CLOSE_AT_FILE" 2>/dev/null || echo '-')"
     ;;
   *) die "usage: fleet-lock-apply {open <user>|close|set-timeout <N> <user>|extend <X> <user>|status}";;
 esac
