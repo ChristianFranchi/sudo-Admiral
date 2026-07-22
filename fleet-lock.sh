@@ -11,7 +11,7 @@ set -euo pipefail
 
 APPLY="/usr/local/sbin/fleet-lock-apply"
 HOSTS_FILE="${FLEET_HOSTS:-$HOME/.config/fleet-lock/hosts}"
-SSH="ssh -o BatchMode=yes -o ConnectTimeout=8"
+SSH="ssh -n -o BatchMode=yes -o ConnectTimeout=8"   # -n = stdin da /dev/null: altrimenti ssh nel while-read si mangia le righe hosts successive
 
 # solo alias host "puliti" (anti-injection): lettere/cifre/._- e MAI un trattino iniziale
 # (ssh lo leggerebbe come opzione); '--' prima dell'host nelle ssh come seconda difesa.
